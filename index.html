@@ -479,7 +479,14 @@
 
     <footer class="page-footer">
       <div class="container">
-        <p>© 2025 Birendra Sharma. All rights reserved.</p>
+        <p>© <span id="copyright-year">2025</span> Birendra Sharma. All rights reserved.</p>
+        <script>
+          try {
+            document.getElementById('copyright-year').textContent = new Date().getFullYear();
+          } catch (e) {
+            // fallback: static year already set
+          }
+        </script>
       </div>
     </footer>
 
