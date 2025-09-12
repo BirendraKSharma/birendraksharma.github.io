@@ -2,7 +2,6 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,python,node
 
 #all files and folder
-js/
 portfolio_media/
 generate_portfolio.py
 icon-192x192.png

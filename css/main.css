@@ -112,6 +112,57 @@ section {
   margin-bottom: 1.5rem;
 }
 
+/* Floating Resume Action Button (FAB) */
+.resume-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1000;
+}
+
+.resume-fab__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--link-color);
+  color: #fff !important;
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+  cursor: pointer;
+}
+
+.resume-fab__btn:hover {
+  background: var(--link-color-hover);
+}
+
+.resume-fab__menu {
+  position: absolute;
+  right: 0;
+  bottom: 3.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.5rem;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.12);
+  min-width: 14rem;
+}
+
+.resume-fab__item {
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  color: #333 !important;
+}
+
+.resume-fab__item:hover {
+  background: #f3f4f6;
+  text-decoration: none;
+}
+
 /* Utility */
 .block {
   display: block;
