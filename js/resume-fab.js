@@ -31,4 +31,13 @@
     const isOpen = btn.getAttribute('aria-expanded') === 'true';
     if (isOpen) closeMenu(); else openMenu();
   });
+
+  // Close the menu after clicking any item (e.g., open or download)
+  menu.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target && target.matches('a')) {
+      // Let the default navigation/download happen, then close
+      setTimeout(closeMenu, 0);
+    }
+  });
 })();
