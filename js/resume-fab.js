@@ -32,11 +32,51 @@
     if (isOpen) closeMenu(); else openMenu();
   });
 
-  // Close the menu after clicking any item (e.g., open or download)
   menu.addEventListener('click', (e) => {
     const target = e.target;
     if (target && target.matches('a')) {
-      // Let the default navigation/download happen, then close
+      setTimeout(closeMenu, 0);
+    }
+  });
+})();
+
+(function() {
+  const btn = document.getElementById('toolsFabBtn');
+  const menu = document.getElementById('toolsFabMenu');
+  if (!btn || !menu) return;
+
+  function openMenu() {
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onDocClick, true);
+    document.addEventListener('keydown', onKeyDown, true);
+  }
+
+  function closeMenu() {
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onDocClick, true);
+    document.removeEventListener('keydown', onKeyDown, true);
+  }
+
+  function onDocClick(e) {
+    if (!menu.contains(e.target) && !btn.contains(e.target)) {
+      closeMenu();
+    }
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Escape') closeMenu();
+  }
+
+  btn.addEventListener('click', () => {
+    const isOpen = btn.getAttribute('aria-expanded') === 'true';
+    if (isOpen) closeMenu(); else openMenu();
+  });
+
+  menu.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target && target.matches('a')) {
       setTimeout(closeMenu, 0);
     }
   });
