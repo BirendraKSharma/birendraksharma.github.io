@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Squish — Image Compressor & Resizer</title>
+<title>HulkSmash — Image Compressor & Resizer</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -224,6 +224,62 @@
   }
   .dim-hint.visible { display: block; }
 
+  /* Apply button */
+  #apply-bar {
+    display: none; margin-top: 20px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; align-items: center;
+    justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  #apply-bar.visible { display: flex; }
+  .apply-info { font-size: 0.78rem; color: var(--muted); }
+  .apply-info span { color: var(--accent); font-weight: 500; }
+
+  .btn-apply {
+    background: var(--accent); color: #0d0d0f; font-family: 'DM Mono', monospace;
+    font-size: 0.78rem; font-weight: 500; padding: 10px 20px; border-radius: 8px; border: none;
+    cursor: pointer; transition: background 0.15s; letter-spacing: 0.04em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-apply:hover { background: #d9ff50; }
+  
+  .btn-apply.processing {
+    background: rgba(200,241,53,0.5);
+    cursor: not-allowed;
+  }
+
+  /* Apply compression bar */
+  #apply-compression-bar {
+    display: none; margin-top: 20px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; align-items: center;
+    justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  #apply-compression-bar.visible { display: flex; }
+  .compression-info { font-size: 0.78rem; color: var(--muted); }
+  .compression-info span { color: var(--accent); font-weight: 500; }
+
+  /* Upload preview list */
+  #upload-preview {
+    margin-top: 28px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .upload-preview-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 8px; }
+  .upload-item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .upload-item input[type="checkbox"] {
+    width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0;
+  }
+  .upload-item-name {
+    flex: 1; font-size: 0.82rem; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .upload-item-size { font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+  .remove-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-size: 0.7rem; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+    transition: all 0.15s; flex-shrink: 0;
+  }
+  .remove-btn:hover { border-color: var(--danger); color: var(--danger); }
+
   /* Results */
   #results { margin-top: 28px; display: flex; flex-direction: column; gap: 14px; }
 
@@ -317,7 +373,7 @@
 
 <div class="container">
   <header>
-    <div class="logo">squish</div>
+    <div class="logo">HulkSmash</div>
     <div class="tagline">compress &amp; resize</div>
   </header>
   <p class="sub">// jpg · png · webp — 100% client-side, nothing ever uploaded</p>
@@ -430,8 +486,37 @@
     </div>
   </div>
 
+  <!-- Upload preview list -->
+  <div id="upload-preview"></div>
+
   <!-- Results -->
   <div id="results"></div>
+
+  <!-- Apply compression bar -->
+  <div id="apply-compression-bar">
+    <div class="compression-info">
+      Apply compression to <span id="apply-comp-count">0</span> image(s)?
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-apply" id="btn-apply-compression" onclick="applyCompressionToAll()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 1H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-1-1.73"/><path d="M16 1v10"/></svg>
+        Apply Compression
+      </button>
+    </div>
+  </div>
+
+  <!-- Apply resize bar -->
+  <div id="apply-bar">
+    <div class="apply-info">
+      Apply resize to <span id="apply-count">0</span> image(s)?
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-apply" id="btn-apply-resize" onclick="applyResizeToAll()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Apply Resize
+      </button>
+    </div>
+  </div>
 
   <!-- Batch bar -->
   <div id="batch-bar">
@@ -457,7 +542,10 @@
   const qualitySlider = document.getElementById('quality');
   const qualityVal    = document.getElementById('quality-val');
   const resultsEl     = document.getElementById('results');
+  const uploadPreview = document.getElementById('upload-preview');
   const batchBar      = document.getElementById('batch-bar');
+  const applyBar      = document.getElementById('apply-bar');
+  const applyCompressionBar = document.getElementById('apply-compression-bar');
   const resizeToggle  = document.getElementById('resize-toggle');
   const resizeForm    = document.getElementById('resize-form');
   const resizeW       = document.getElementById('resize-w');
@@ -471,6 +559,8 @@
   let aspectLocked = true;
   let aspectRatio  = null;
   let compressed   = [];
+  let uploadedFiles = []; // Array of {id, file, imageData, selected}
+  let nextFileId = 0;
 
   // Quality slider
   qualitySlider.addEventListener('input', () => { qualityVal.textContent = qualitySlider.value + '%'; });
@@ -495,7 +585,10 @@
   });
 
   // Resize toggle
-  resizeToggle.addEventListener('change', () => resizeForm.classList.toggle('visible', resizeToggle.checked));
+  resizeToggle.addEventListener('change', () => {
+    resizeForm.classList.toggle('visible', resizeToggle.checked);
+    updateApplyBars();
+  });
 
   // Lock button
   const LOCKED_PATH   = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
@@ -519,12 +612,14 @@
     if (aspectLocked && aspectRatio && resizeW.value)
       resizeH.value = Math.round(parseFloat(resizeW.value) / aspectRatio) || '';
     updateHint();
+    updateApplyBars();
   });
 
   resizeH.addEventListener('input', () => {
     if (aspectLocked && aspectRatio && resizeH.value)
       resizeW.value = Math.round(parseFloat(resizeH.value) * aspectRatio) || '';
     updateHint();
+    updateApplyBars();
   });
 
   // Presets
@@ -536,6 +631,7 @@
       resizeH.value = btn.dataset.h;
       aspectRatio = parseInt(btn.dataset.w) / parseInt(btn.dataset.h);
       updateHint();
+      updateApplyBars();
     });
   });
 
@@ -564,34 +660,105 @@
   function handleFiles(files) {
     const imgs = files.filter(f => f.type.startsWith('image/'));
     if (!imgs.length) { showToast('No valid images found.'); return; }
-    imgs.forEach(processImage);
+    
+    imgs.forEach(file => {
+      const fileId = nextFileId++;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        // Store uploaded file data
+        uploadedFiles.push({
+          id: fileId,
+          file,
+          imageData: ev.target.result,
+          selected: true
+        });
+        updateUploadPreview();
+        updateApplyBars();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function updateUploadPreview() {
+    if (!uploadedFiles.length) {
+      uploadPreview.innerHTML = '';
+      return;
+    }
+    
+    let html = '<div class="upload-preview-label">📁 UPLOADED IMAGES</div>';
+    uploadedFiles.forEach(item => {
+      html += `
+        <div class="upload-item">
+          <input type="checkbox" data-id="${item.id}" ${item.selected ? 'checked' : ''} onchange="toggleFileSelection(${item.id})">
+          <span class="upload-item-name">${esc(item.file.name)}</span>
+          <span class="upload-item-size">${fmtBytes(item.file.size)}</span>
+          <button class="remove-btn" onclick="removeFile(${item.id})">Remove</button>
+        </div>`;
+    });
+    uploadPreview.innerHTML = html;
+  }
+
+  function toggleFileSelection(id) {
+    const item = uploadedFiles.find(f => f.id === id);
+    if (item) item.selected = !item.selected;
+  }
+
+  function removeFile(id) {
+    uploadedFiles = uploadedFiles.filter(f => f.id !== id);
+    updateUploadPreview();
+    updateApplyBars();
   }
 
   // ── Core processing ──────────────────────────────────────────
-  function processImage(file) {
+  function processImage(file, imageData = null, operation = 'compress') {
+    // operation can be 'compress', 'resize', or 'both'
     const quality  = parseInt(qualitySlider.value) / 100;
     const fmt      = outputFormat === 'same' ? file.type : outputFormat;
     const ext      = fmt === 'image/png' ? 'png' : fmt === 'image/webp' ? 'webp' : 'jpg';
     const baseName = file.name.replace(/\.[^.]+$/, '');
-    const outName  = baseName + '-squished.' + ext;
+    
+    // Determine output names based on operation
+    let compressName, resizeName;
+    if (operation === 'compress') {
+      compressName = baseName + '-compressed.' + ext;
+    } else if (operation === 'resize') {
+      resizeName = baseName + '-squished.' + ext;
+    } else {
+      compressName = baseName + '-compressed.' + ext;
+      resizeName = baseName + '-resized.' + ext;
+    }
+
     const doResize = resizeToggle.checked;
     const tW = doResize ? (parseInt(resizeW.value) || 0) : 0;
     const tH = doResize ? (parseInt(resizeH.value) || 0) : 0;
 
-    // Placeholder
-    const card = document.createElement('div');
-    card.className = 'result-card';
-    card.innerHTML = `
-      <div class="spinner"></div>
-      <div class="file-info">
-        <div class="file-name">${esc(file.name)}</div>
-        <div style="font-size:.72rem;color:var(--muted)">processing…</div>
-      </div>
-      <div></div>`;
-    resultsEl.appendChild(card);
+    // Create placeholder(s)
+    const createPlaceholder = (name) => {
+      const card = document.createElement('div');
+      card.className = 'result-card';
+      card.innerHTML = `
+        <div class="spinner"></div>
+        <div class="file-info">
+          <div class="file-name">${esc(name)}</div>
+          <div style="font-size:.72rem;color:var(--muted)">processing…</div>
+        </div>
+        <div></div>`;
+      resultsEl.appendChild(card);
+      return card;
+    };
 
-    const reader = new FileReader();
-    reader.onload = ev => {
+    let cards = {};
+    if (operation === 'compress') {
+      cards.compress = createPlaceholder(compressName);
+    } else if (operation === 'resize') {
+      cards.resize = createPlaceholder(resizeName);
+    } else {
+      cards.compress = createPlaceholder(compressName);
+      cards.resize = createPlaceholder(resizeName);
+    }
+
+    // Process image data
+    const processImageData = (imgDataUrl) => {
       const img = new Image();
       img.onload = () => {
         const oW = img.naturalWidth, oH = img.naturalHeight;
@@ -599,90 +766,116 @@
         // Seed aspect ratio from first image if locked and not set
         if (aspectLocked && !aspectRatio) aspectRatio = oW / oH;
 
-        let canvW = oW, canvH = oH;
-        let sx = 0, sy = 0, sw = oW, sh = oH; // source crop for cover
-
-        if (doResize && (tW || tH)) {
-          if (fitMode === 'stretch') {
-            canvW = tW || oW;
-            canvH = tH || oH;
-          } else if (fitMode === 'contain') {
-            const sW = tW ? tW / oW : Infinity;
-            const sH = tH ? tH / oH : Infinity;
-            const s  = Math.min(sW, sH);
-            canvW = Math.max(1, Math.round(oW * s));
-            canvH = Math.max(1, Math.round(oH * s));
-          } else { // cover
-            canvW = tW || oW;
-            canvH = tH || oH;
-            const s  = Math.max(canvW / oW, canvH / oH);
-            const scaledW = oW * s, scaledH = oH * s;
-            sx = (scaledW - canvW) / 2 / s;
-            sy = (scaledH - canvH) / 2 / s;
-            sw = canvW / s;
-            sh = canvH / s;
-          }
+        // Process compression
+        if (operation === 'compress' || operation === 'both') {
+          processOperation(img, oW, oH, false, cards.compress, file, compressName, fmt, quality);
         }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = canvW; canvas.height = canvH;
-        const ctx = canvas.getContext('2d');
-
-        if (fmt === 'image/jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvW, canvH); }
-
-        if (fitMode === 'cover' && doResize && (tW || tH))
-          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvW, canvH);
-        else
-          ctx.drawImage(img, 0, 0, canvW, canvH);
-
-        canvas.toBlob(blob => {
-          if (!blob) { card.remove(); showToast('Failed: ' + file.name); return; }
-
-          const origSize = file.size;
-          const compSize = blob.size;
-          const savedPct = Math.round(((origSize - compSize) / origSize) * 100);
-          const url = URL.createObjectURL(blob);
-          const isResized = doResize && (tW || tH);
-
-          compressed.push({ name: outName, blob, origSize, compSize });
-
-          card.innerHTML = `
-            <img class="thumb" src="${url}" alt="">
-            <div class="file-info">
-              <div class="file-name">${esc(outName)}</div>
-              <div class="meta-row">
-                <span class="dim-badge">${isResized ? canvW+'×'+canvH : oW+'×'+oH} px</span>
-                <span class="size-old">${fmtBytes(origSize)}</span>
-                <span class="size-arrow">→</span>
-                <span class="size-new">${fmtBytes(compSize)}</span>
-                <span class="saving-badge ${savedPct < 0 ? 'bad':''}">
-                  ${savedPct >= 0 ? '-'+savedPct+'%' : '+'+Math.abs(savedPct)+'%'}
-                </span>
-              </div>
-              <div class="progress-wrap"><div class="progress-bar"></div></div>
-            </div>
-            <button class="dl-btn" title="Download">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </button>`;
-
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            card.querySelector('.progress-bar').style.width = Math.max(5, 100 - Math.abs(savedPct)) + '%';
-          }));
-
-          card.querySelector('.dl-btn').addEventListener('click', () => {
-            downloadBlob(blob, outName); showToast('Downloaded ' + outName);
-          });
-
-          updateBatchBar();
-        }, fmt, quality);
+        // Process resize
+        if (operation === 'resize' || operation === 'both') {
+          // For resize-only, use 100% quality (no compression)
+          const resizeQuality = operation === 'resize' ? 1.0 : quality;
+          processOperation(img, oW, oH, true, cards.resize, file, resizeName, fmt, resizeQuality);
+        }
       };
-      img.src = ev.target.result;
+      img.src = imgDataUrl;
     };
-    reader.readAsDataURL(file);
+
+    // Helper to process each operation
+    const processOperation = (img, oW, oH, applyResize, card, file, outName, fmt, quality) => {
+      let canvW = oW, canvH = oH;
+      let sx = 0, sy = 0, sw = oW, sh = oH;
+
+      if (applyResize && (tW || tH)) {
+        if (fitMode === 'stretch') {
+          canvW = tW || oW;
+          canvH = tH || oH;
+        } else if (fitMode === 'contain') {
+          const sW = tW ? tW / oW : Infinity;
+          const sH = tH ? tH / oH : Infinity;
+          const s  = Math.min(sW, sH);
+          canvW = Math.max(1, Math.round(oW * s));
+          canvH = Math.max(1, Math.round(oH * s));
+        } else { // cover
+          canvW = tW || oW;
+          canvH = tH || oH;
+          const s  = Math.max(canvW / oW, canvH / oH);
+          const scaledW = oW * s, scaledH = oH * s;
+          sx = (scaledW - canvW) / 2 / s;
+          sy = (scaledH - canvH) / 2 / s;
+          sw = canvW / s;
+          sh = canvH / s;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = canvW; canvas.height = canvH;
+      const ctx = canvas.getContext('2d');
+
+      if (fmt === 'image/jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvW, canvH); }
+
+      if (fitMode === 'cover' && applyResize && (tW || tH))
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvW, canvH);
+      else
+        ctx.drawImage(img, 0, 0, canvW, canvH);
+
+      canvas.toBlob(blob => {
+        if (!blob) { card.remove(); showToast('Failed: ' + file.name); return; }
+
+        const origSize = file.size;
+        const compSize = blob.size;
+        const savedPct = Math.round(((origSize - compSize) / origSize) * 100);
+        const url = URL.createObjectURL(blob);
+        const isResized = applyResize && (tW || tH);
+
+        compressed.push({ name: outName, blob, origSize, compSize });
+
+        card.innerHTML = `
+          <img class="thumb" src="${url}" alt="">
+          <div class="file-info">
+            <div class="file-name">${esc(outName)}</div>
+            <div class="meta-row">
+              <span class="dim-badge">${isResized ? canvW+'×'+canvH : oW+'×'+oH} px</span>
+              <span class="size-old">${fmtBytes(origSize)}</span>
+              <span class="size-arrow">→</span>
+              <span class="size-new">${fmtBytes(compSize)}</span>
+              <span class="saving-badge ${savedPct < 0 ? 'bad':''}">
+                ${savedPct >= 0 ? '-'+savedPct+'%' : '+'+Math.abs(savedPct)+'%'}
+              </span>
+            </div>
+            <div class="progress-wrap"><div class="progress-bar"></div></div>
+          </div>
+          <button class="dl-btn" title="Download">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>`;
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          card.querySelector('.progress-bar').style.width = Math.max(5, 100 - Math.abs(savedPct)) + '%';
+        }));
+
+        card.querySelector('.dl-btn').addEventListener('click', () => {
+          downloadBlob(blob, outName); showToast('Downloaded ' + outName);
+        });
+
+        updateBatchBar();
+        updateApplyBars();
+      }, fmt, quality);
+    };
+
+    if (imageData) {
+      processImageData(imageData);
+    } else {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        // Just process the data
+        processImageData(ev.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -710,6 +903,81 @@
     document.getElementById('batch-saved').textContent = fmtBytes(Math.max(0, totalSaved));
   }
 
+  function updateApplyBars() {
+    updateApplyBar();
+    updateCompressionApplyBar();
+  }
+
+  function updateApplyBar() {
+    const resizeEnabled = resizeToggle.checked;
+    const selectedCount = uploadedFiles.filter(f => f.selected).length;
+    const hasResizeSettings = resizeW.value || resizeH.value;
+    
+    if (resizeEnabled && selectedCount > 0 && hasResizeSettings) {
+      applyBar.classList.add('visible');
+      document.getElementById('apply-count').textContent = selectedCount;
+    } else {
+      applyBar.classList.remove('visible');
+    }
+  }
+
+  function updateCompressionApplyBar() {
+    const selectedCount = uploadedFiles.filter(f => f.selected).length;
+    
+    // Show compression bar when images are selected
+    if (selectedCount > 0) {
+      applyCompressionBar.classList.add('visible');
+      document.getElementById('apply-comp-count').textContent = selectedCount;
+    } else {
+      applyCompressionBar.classList.remove('visible');
+    }
+  }
+
+  function applyResizeToAll() {
+    const selected = uploadedFiles.filter(f => f.selected);
+    if (!selected.length) { showToast('No images selected'); return; }
+    if (!resizeToggle.checked) { showToast('Resize is not enabled'); return; }
+    
+    const applyBtn = document.getElementById('btn-apply-resize');
+    applyBtn.classList.add('processing');
+    applyBtn.disabled = true;
+
+    // Process only selected images with resize-only
+    selected.forEach(item => {
+      processImage(item.file, item.imageData, 'resize');
+    });
+
+    setTimeout(() => {
+      applyBtn.classList.remove('processing');
+      applyBtn.disabled = false;
+      updateApplyBars();
+    }, 300);
+
+    showToast('Applying resize to ' + selected.length + ' image(s)…');
+  }
+
+  function applyCompressionToAll() {
+    const selected = uploadedFiles.filter(f => f.selected);
+    if (!selected.length) { showToast('No images selected'); return; }
+    
+    const applyBtn = document.getElementById('btn-apply-compression');
+    applyBtn.classList.add('processing');
+    applyBtn.disabled = true;
+
+    // Process only selected images with compression-only
+    selected.forEach(item => {
+      processImage(item.file, item.imageData, 'compress');
+    });
+
+    setTimeout(() => {
+      applyBtn.classList.remove('processing');
+      applyBtn.disabled = false;
+      updateApplyBars();
+    }, 300);
+
+    showToast('Applying compression to ' + selected.length + ' image(s)…');
+  }
+
   function downloadAll() {
     if (!compressed.length) return;
     compressed.forEach((c,i) => setTimeout(() => downloadBlob(c.blob, c.name), i * 120));
@@ -717,8 +985,13 @@
   }
 
   function clearAll() {
-    compressed = []; resultsEl.innerHTML = '';
+    compressed = [];
+    uploadedFiles = [];
+    nextFileId = 0;
+    resultsEl.innerHTML = '';
+    updateUploadPreview();
     updateBatchBar();
+    updateApplyBars();
   }
 
   let toastTimer;

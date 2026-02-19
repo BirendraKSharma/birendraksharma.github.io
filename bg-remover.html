@@ -1,0 +1,642 @@
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>LeviAckerman — Background Remover</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #09090b;
+    --surface: #111114;
+    --surf2:   #1c1c20;
+    --border:  #2a2a30;
+    --accent:  #a78bfa;
+    --accd:    #7c3aed;
+    --accl:    #c4b5fd;
+    --text:    #f4f4f5;
+    --muted:   #71717a;
+    --green:   #4ade80;
+    --red:     #f87171;
+    --R:       16px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 16px 80px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -100px; left: 50%;
+    transform: translateX(-50%);
+    width: 700px; height: 380px;
+    background: radial-gradient(ellipse, rgba(124,58,237,0.13) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { width: 100%; max-width: 740px; position: relative; z-index: 1; }
+
+  /* Header */
+  header { text-align: center; margin-bottom: 32px; }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 12vw, 5rem);
+    letter-spacing: 4px; line-height: 1; margin-bottom: 8px;
+  }
+  .logo span { color: var(--accent); }
+  .sub { font-size: .78rem; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+
+  /* Status bar */
+  #sbar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 18px;
+    margin-bottom: 18px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .srow { display: flex; align-items: center; gap: 12px; }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--muted); flex-shrink: 0;
+    transition: background .3s, box-shadow .3s;
+  }
+  .dot.wait  { background: #f59e0b; animation: blink 1.2s ease-in-out infinite; }
+  .dot.ready { background: var(--green); box-shadow: 0 0 8px rgba(74,222,128,.45); }
+  .dot.err   { background: var(--red); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+  .smsg { flex: 1; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+  .smsg strong { color: var(--text); font-weight: 600; }
+
+  .pw { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; display: none; }
+  .pw.on { display: block; }
+  .pb { height: 100%; background: linear-gradient(90deg, var(--accd), var(--accent)); border-radius: 3px; width: 0%; transition: width .4s ease; }
+  .pl { font-size: .7rem; color: var(--muted); display: none; }
+  .pl.on { display: block; }
+
+  /* Drop zone */
+  .zone {
+    border: 2px dashed var(--border); border-radius: var(--R);
+    padding: clamp(36px,8vw,52px) 24px; text-align: center;
+    cursor: pointer; background: var(--surface);
+    position: relative; overflow: hidden;
+    transition: border-color .2s, background .2s;
+  }
+  .zone::after {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(135deg,rgba(124,58,237,.04) 0%,transparent 60%);
+    pointer-events:none;
+  }
+  .zone:hover, .zone.over { border-color: var(--accd); }
+  .zone.over { background: rgba(124,58,237,.05); }
+  .zone.locked { opacity: .45; pointer-events: none; cursor: not-allowed; }
+
+  .dicon {
+    width:60px; height:60px; margin:0 auto 16px;
+    background:rgba(124,58,237,.12); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .25s;
+  }
+  .zone:hover .dicon { transform: scale(1.1) rotate(-6deg); }
+  .dicon svg { width:28px; height:28px; stroke:var(--accent); }
+
+  .dtitle { font-size:clamp(1rem,3vw,1.15rem); font-weight:600; margin-bottom:6px; }
+  .dsub   { color:var(--muted); font-size:.82rem; margin-bottom:20px; }
+
+  .tags { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
+  .tag  { background:var(--surf2); border:1px solid var(--border); color:var(--muted); font-size:.68rem; padding:3px 9px; border-radius:5px; letter-spacing:.06em; text-transform:uppercase; }
+  .tag.hi { border-color:var(--accd); color:var(--accl); background:rgba(124,58,237,.08); }
+
+  .btn-pick {
+    display:inline-flex; align-items:center; gap:8px;
+    background:linear-gradient(135deg,var(--accd),var(--accent));
+    color:#fff; font-family:'DM Sans',sans-serif;
+    font-size:.88rem; font-weight:600;
+    padding:12px 28px; border-radius:10px; border:none;
+    cursor:pointer; box-shadow:0 4px 20px rgba(124,58,237,.3);
+    transition:opacity .2s,transform .15s;
+  }
+  .btn-pick:hover { opacity:.9; transform:translateY(-2px); }
+  .btn-pick:active { transform:translateY(0); }
+  .btn-pick svg { width:15px; height:15px; stroke:#fff; }
+  #fi { display:none; }
+
+  /* Cards */
+  #results { margin-top:22px; display:flex; flex-direction:column; gap:18px; }
+
+  .card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--R); overflow:hidden;
+    animation:cardIn .28s cubic-bezier(.34,1.56,.64,1) forwards;
+    opacity:0; transform:translateY(10px) scale(.98);
+  }
+  @keyframes cardIn { to { opacity:1; transform:translateY(0) scale(1); } }
+
+  .ctop {
+    padding:12px 15px; display:flex; align-items:center;
+    gap:10px; border-bottom:1px solid var(--border);
+  }
+  .cthumb { width:34px; height:34px; object-fit:cover; border-radius:7px; background:var(--surf2); flex-shrink:0; }
+  .cname  { flex:1; font-size:.82rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .cst    { font-size:.72rem; color:var(--muted); display:flex; align-items:center; gap:6px; flex-shrink:0; white-space:nowrap; }
+  .cst.proc { color:var(--accl); }
+  .cst.done { color:var(--green); }
+  .cst.err  { color:var(--red); }
+
+  .cprev { display:grid; grid-template-columns:1fr 1fr; }
+  .cpane { padding:13px; }
+  .cpane:first-child { border-right:1px solid var(--border); }
+  .plabel { font-size:.64rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:8px; font-weight:500; }
+
+  .checker {
+    border-radius:9px; overflow:hidden;
+    background:repeating-conic-gradient(#1c1c20 0% 25%,#111114 0% 50%) 0 0/18px 18px;
+    aspect-ratio:4/3; display:flex; align-items:center; justify-content:center;
+    transition:background .25s;
+  }
+  .checker img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+
+  .procbox {
+    aspect-ratio:4/3; border-radius:9px; background:var(--surf2);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; padding:14px;
+  }
+  .spin2 { position:relative; width:36px; height:36px; }
+  .spin2::before,.spin2::after { content:''; position:absolute; inset:0; border-radius:50%; border:3px solid transparent; }
+  .spin2::before { border-top-color:var(--accent); animation:sp .9s linear infinite; }
+  .spin2::after  { border-bottom-color:var(--accd); animation:sp .9s linear infinite reverse; inset:7px; }
+  @keyframes sp  { to { transform:rotate(360deg); } }
+
+  .pstage { font-size:.78rem; font-weight:600; color:var(--accl); }
+  .pbar-w { width:100%; height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+  .pbar   { height:100%; background:linear-gradient(90deg,var(--accd),var(--accent)); width:0%; transition:width .4s; }
+  .ptxt   { font-size:.68rem; color:var(--muted); text-align:center; line-height:1.6; }
+
+  .cfoot {
+    padding:11px 15px; border-top:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  }
+  .swatches { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .sw-lbl   { font-size:.64rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-right:2px; }
+  .sw { width:22px; height:22px; border-radius:5px; border:2px solid transparent; cursor:pointer; transition:transform .15s,border-color .15s; }
+  .sw:hover { transform:scale(1.2); }
+  .sw.on  { border-color:var(--accent); }
+  .sw-tp  { background:repeating-conic-gradient(#3a3a40 0% 25%,#1c1c20 0% 50%) 0 0/10px 10px; }
+
+  .cacts { display:flex; gap:8px; align-items:center; }
+
+  .btn-dl {
+    display:inline-flex; align-items:center; gap:7px;
+    background:linear-gradient(135deg,var(--accd),var(--accent));
+    color:#fff; font-family:'DM Sans',sans-serif;
+    font-size:.78rem; font-weight:600;
+    padding:8px 16px; border-radius:8px; border:none;
+    cursor:pointer; box-shadow:0 2px 10px rgba(124,58,237,.25);
+    transition:opacity .15s,transform .1s;
+  }
+  .btn-dl:hover { opacity:.9; transform:translateY(-1px); }
+  .btn-dl:disabled { opacity:.3; cursor:not-allowed; transform:none; box-shadow:none; }
+  .btn-dl svg { width:13px; height:13px; stroke:#fff; }
+
+  .btn-x {
+    background:transparent; border:1px solid var(--border); color:var(--muted);
+    width:32px; height:32px; border-radius:7px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition:all .15s; flex-shrink:0;
+  }
+  .btn-x:hover { border-color:var(--red); color:var(--red); }
+  .btn-x svg { width:14px; height:14px; }
+
+  .errbody {
+    padding:16px 15px; display:flex; align-items:flex-start;
+    gap:10px; font-size:.8rem; color:#fca5a5;
+  }
+  .errbody svg { width:17px; height:17px; stroke:var(--red); flex-shrink:0; margin-top:1px; }
+
+  /* Bottom bar */
+  #bbar {
+    display:none; margin-top:18px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--R); padding:12px 18px;
+    align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  #bbar.vis { display:flex; }
+  .binfo { font-size:.8rem; color:var(--muted); }
+  .binfo strong { color:var(--text); }
+  .btn-clr {
+    background:transparent; color:var(--muted);
+    font-family:'DM Sans',sans-serif; font-size:.78rem; font-weight:500;
+    padding:7px 14px; border-radius:8px; border:1px solid var(--border);
+    cursor:pointer; transition:all .15s;
+  }
+  .btn-clr:hover { border-color:var(--red); color:var(--red); }
+
+  /* Toast */
+  #toast {
+    position:fixed; bottom:22px; left:50%;
+    transform:translateX(-50%) translateY(14px);
+    background:var(--surf2); border:1px solid var(--border);
+    color:var(--text); font-size:.8rem; padding:9px 18px; border-radius:9px;
+    opacity:0; pointer-events:none; transition:all .2s;
+    white-space:nowrap; z-index:9999; box-shadow:0 8px 32px rgba(0,0,0,.5);
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  footer { margin-top:44px; text-align:center; font-size:.68rem; color:var(--muted); line-height:2; opacity:.55; }
+  footer a { color:var(--accl); text-decoration:none; }
+
+  @media(max-width:480px){
+    .cprev { grid-template-columns:1fr; }
+    .cpane:first-child { border-right:none; border-bottom:1px solid var(--border); }
+    .cfoot { flex-direction:column; align-items:flex-start; }
+    .cacts { width:100%; justify-content:flex-end; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">Levi<span>Slash</span></div>
+    <div class="sub">AI Background Remover · 100% on-device · no upload · no account</div>
+  </header>
+
+  <div id="sbar">
+    <div class="srow">
+      <div class="dot wait" id="dot"></div>
+      <div class="smsg" id="smsg">
+        <strong>Ready.</strong> Select an image — AI model downloads once (~25 MB) then works offline.
+      </div>
+    </div>
+    <div class="pw" id="pw"><div class="pb" id="pb"></div></div>
+    <div class="pl" id="pl"></div>
+  </div>
+
+  <div class="zone" id="zone">
+    <div class="dicon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </div>
+    <div class="dtitle">Drop images here</div>
+    <div class="dsub">People · products · animals · objects</div>
+    <div class="tags">
+      <span class="tag">JPG</span><span class="tag">PNG</span><span class="tag">WebP</span>
+      <span class="tag hi">🔒 100% private</span>
+      <span class="tag hi">✈ offline after first load</span>
+    </div>
+    <button class="btn-pick" onclick="document.getElementById('fi').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      Select Images
+    </button>
+    <input type="file" id="fi" accept="image/*" multiple>
+  </div>
+
+  <div id="results"></div>
+
+  <div id="bbar">
+    <div class="binfo"><strong id="dnum">0</strong> images processed</div>
+    <button class="btn-clr" onclick="clearAll()">Clear all</button>
+  </div>
+</div>
+
+<footer>
+  Model: <a href="https://huggingface.co/Xenova/modnet" target="_blank">Xenova/modnet</a>
+  · Runs in your browser via WebAssembly · Images never leave your device<br>
+  Cached after first download — works offline on any device afterwards
+</footer>
+<div id="toast"></div>
+
+<script type="module">
+  import { pipeline, env } from
+    'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.0/dist/transformers.min.js';
+
+  env.allowLocalModels = false;
+
+  /* ─── state ────────────────────────────────────────── */
+  let segmenter    = null;
+  let modelLoading = false;
+  let doneCount    = 0;
+  let cardIdx      = 0;
+
+  const zone    = document.getElementById('zone');
+  const fi      = document.getElementById('fi');
+  const results = document.getElementById('results');
+  const bbar    = document.getElementById('bbar');
+  const dot     = document.getElementById('dot');
+  const smsg    = document.getElementById('smsg');
+  const pw      = document.getElementById('pw');
+  const pb      = document.getElementById('pb');
+  const pl      = document.getElementById('pl');
+
+  function setStatus(state, html) {
+    dot.className = 'dot ' + state;
+    smsg.innerHTML = html;
+  }
+
+  /* ─── load model on first use ──────────────────────── */
+  async function loadModel() {
+    if (segmenter) return true;
+    if (modelLoading) {
+      while (modelLoading) await sleep(150);
+      return !!segmenter;
+    }
+    modelLoading = true;
+    zone.classList.add('locked');
+    pw.classList.add('on');
+    pl.classList.add('on');
+    setStatus('wait', '<strong>Downloading AI model…</strong> First time only (~25 MB), cached offline afterwards.');
+
+    try {
+      segmenter = await pipeline('background-removal', 'Xenova/modnet', {
+        progress_callback(info) {
+          if (info.status === 'progress' && info.total > 0) {
+            const pct = Math.round(info.progress);
+            const mb  = (info.loaded / 1048576).toFixed(1);
+            const tot = (info.total  / 1048576).toFixed(1);
+            pb.style.width = pct + '%';
+            pl.textContent = `${mb} / ${tot} MB  (${pct}%)`;
+          }
+        }
+      });
+
+      pw.classList.remove('on');
+      pl.classList.remove('on');
+      zone.classList.remove('locked');
+      setStatus('ready', '<strong>Model ready!</strong> Drop images below — backgrounds removed instantly.');
+      modelLoading = false;
+      return true;
+
+    } catch (err) {
+      pw.classList.remove('on');
+      pl.classList.remove('on');
+      zone.classList.remove('locked');
+      modelLoading = false;
+      segmenter = null;
+      setStatus('err',
+        `<strong>Failed to load model.</strong> Check your internet connection and reload.<br>
+         <small style="color:var(--red)">${esc(err.message)}</small>`);
+      console.error('Model load error:', err);
+      return false;
+    }
+  }
+
+  /* ─── drop zone ────────────────────────────────────── */
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('over');
+    handleFiles([...e.dataTransfer.files]);
+  });
+  zone.addEventListener('click', e => { if (!e.target.closest('.btn-pick')) fi.click(); });
+  fi.addEventListener('change', () => { handleFiles([...fi.files]); fi.value = ''; });
+
+  function handleFiles(files) {
+    const imgs = files.filter(f => f.type.startsWith('image/'));
+    if (!imgs.length) { toast('No valid image files found'); return; }
+    imgs.forEach(processImage);
+  }
+
+  /* ─── process one image ────────────────────────────── */
+  async function processImage(file) {
+    const idx     = cardIdx++;
+    const origUrl = URL.createObjectURL(file);
+    const outName = file.name.replace(/\.[^.]+$/, '') + '-cutout.png';
+
+    /* build card */
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `card-${idx}`;
+    card.innerHTML = `
+      <div class="ctop">
+        <img class="cthumb" src="${origUrl}" alt="">
+        <div class="cname">${esc(file.name)}</div>
+        <div class="cst proc" id="cst-${idx}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10"/>
+            <path d="M3.51 15a9 9 0 1 0 .49-3.21"/>
+          </svg>Waiting…
+        </div>
+      </div>
+      <div class="cprev">
+        <div class="cpane">
+          <div class="plabel">Original</div>
+          <div class="checker"><img src="${origUrl}" alt="original"></div>
+        </div>
+        <div class="cpane">
+          <div class="plabel">Background removed</div>
+          <div class="procbox" id="cpane-${idx}">
+            <div class="spin2"></div>
+            <div class="pstage" id="pstage-${idx}">Loading model…</div>
+            <div class="pbar-w"><div class="pbar" id="cbar-${idx}"></div></div>
+            <div class="ptxt">Running AI on your device</div>
+          </div>
+        </div>
+      </div>
+      <div class="cfoot" id="cfoot-${idx}">
+        <div class="swatches" id="csw-${idx}"><span class="sw-lbl">Preview on:</span></div>
+        <div class="cacts">
+          <button class="btn-x" onclick="rmCard(${idx})" title="Remove">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+          <button class="btn-dl" id="cdl-${idx}" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Save PNG
+          </button>
+        </div>
+      </div>`;
+    results.appendChild(card);
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const cst    = () => document.getElementById(`cst-${idx}`);
+    const cpane  = () => document.getElementById(`cpane-${idx}`);
+    const pstage = () => document.getElementById(`pstage-${idx}`);
+    const cbar   = () => document.getElementById(`cbar-${idx}`);
+
+    try {
+      /* 1. load model (no-op if already loaded) */
+      const ready = await loadModel();
+      if (!ready) throw new Error('Model failed to load — check internet connection and reload the page.');
+
+      /* 2. update card */
+      const st = cst();
+      if (st) st.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.21"/></svg>Running AI…`;
+      const ps = pstage(); if (ps) ps.textContent = 'Removing background…';
+      const cb = cbar();   if (cb) cb.style.width = '30%';
+
+      /* 3. run pipeline → returns Array<RawImage> */
+      const output = await segmenter(origUrl);
+
+      if (cb) cb.style.width = '80%';
+
+      /* 4. output[0] is a RawImage — call .toCanvas() on it, then .toBlob() on the canvas */
+      const resultCanvas = output[0].toCanvas();   // ← synchronous, returns HTMLCanvasElement
+      const resultBlob   = await canvasToBlob(resultCanvas, 'image/png');
+      const resultUrl    = URL.createObjectURL(resultBlob);
+
+      if (cb) cb.style.width = '100%';
+
+      /* 5. swap procbox → result image */
+      const pane = cpane();
+      if (pane) {
+        const ch  = document.createElement('div');
+        ch.className = 'checker';
+        ch.id = `cpane-${idx}`;
+        const img = document.createElement('img');
+        img.src = resultUrl; img.alt = 'cutout';
+        ch.appendChild(img);
+        pane.replaceWith(ch);
+      }
+
+      /* 6. status → Done */
+      const st2 = cst();
+      if (st2) {
+        st2.className = 'cst done';
+        st2.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/></svg> Done`;
+      }
+
+      /* 7. background swatches */
+      const swWrap = document.getElementById(`csw-${idx}`);
+      if (swWrap) {
+        [
+          { l:'transparent', cls:'sw-tp', bg:null  },
+          { l:'white',  bg:'#ffffff' }, { l:'black',  bg:'#09090b' },
+          { l:'gray',   bg:'#71717a' }, { l:'violet', bg:'#7c3aed' },
+          { l:'rose',   bg:'#e11d48' }, { l:'sky',    bg:'#0284c7' },
+          { l:'amber',  bg:'#d97706' }, { l:'green',  bg:'#16a34a' },
+        ].forEach((s, i) => {
+          const sw = document.createElement('div');
+          sw.className = 'sw ' + (s.cls||'') + (i===0?' on':'');
+          sw.title = s.l;
+          if (s.bg) sw.style.background = s.bg;
+          sw.onclick = () => {
+            swWrap.querySelectorAll('.sw').forEach(x => x.classList.remove('on'));
+            sw.classList.add('on');
+            const p = document.getElementById(`cpane-${idx}`);
+            if (p) p.style.background = s.bg
+              ? s.bg
+              : 'repeating-conic-gradient(#1c1c20 0% 25%,#111114 0% 50%) 0 0/18px 18px';
+          };
+          swWrap.appendChild(sw);
+        });
+      }
+
+      /* 8. enable download */
+      const dl = document.getElementById(`cdl-${idx}`);
+      if (dl) {
+        dl.disabled = false;
+        dl.onclick = () => { dlBlob(resultBlob, outName); toast('Saved ' + outName); };
+      }
+
+      doneCount++;
+      document.getElementById('dnum').textContent = doneCount;
+      bbar.classList.add('vis');
+
+    } catch (err) {
+      const pane = cpane();
+      if (pane) {
+        pane.outerHTML = `
+          <div class="errbody" id="cpane-${idx}">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>${esc(err.message)}</span>
+          </div>`;
+      }
+      const st = cst();
+      if (st) { st.className = 'cst err'; st.textContent = 'Error'; }
+      toast('Failed: ' + file.name);
+      console.error(err);
+    }
+  }
+
+  /* ─── helpers ──────────────────────────────────────── */
+
+  // canvas.toBlob is callback-based — wrap in a Promise
+function canvasToBlob(canvas, type = 'image/png') {
+  // Case 1: HTMLCanvasElement
+  if (canvas.toBlob) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error('canvas.toBlob returned null'));
+      }, type);
+    });
+  }
+
+  // Case 2: OffscreenCanvas
+  if (canvas.convertToBlob) {
+    return canvas.convertToBlob({ type });
+  }
+
+  throw new Error('Canvas does not support blob conversion');
+}
+
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  window.rmCard = idx => {
+    const c = document.getElementById(`card-${idx}`);
+    if (c) { c.style.transition='opacity .2s'; c.style.opacity='0'; setTimeout(()=>c.remove(),200); }
+    setTimeout(()=>{ if(!results.children.length) bbar.classList.remove('vis'); }, 300);
+  };
+
+  window.clearAll = () => {
+    results.innerHTML = '';
+    doneCount = 0;
+    document.getElementById('dnum').textContent = '0';
+    bbar.classList.remove('vis');
+  };
+
+  function dlBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  let toastT;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('show'), 3500);
+  }
+</script>
+</body>
+</html>
