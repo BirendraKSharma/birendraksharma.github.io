@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Scanlens — OCR in your browser</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0e0e10;
+    --surface:  #18181c;
+    --surf2:    #222228;
+    --surf3:    #2c2c34;
+    --border:   #333340;
+    --accent:   #f0c060;
+    --accent2:  #e89030;
+    --text:     #f0efe8;
+    --muted:    #888890;
+    --green:    #5dba7a;
+    --red:      #e05858;
+    --blue:     #5b9cf6;
+    --R:        12px;
+  }
+
+  [data-theme="light"] {
+    --bg:      #f5f3ee;
+    --surface: #ffffff;
+    --surf2:   #f0ede8;
+    --surf3:   #e8e4dc;
+    --border:  #d8d4cc;
+    --text:    #1a1814;
+    --muted:   #7a7870;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Geist Mono', monospace;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── top bar ────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px;
+    backdrop-filter: blur(8px);
+  }
+
+  .brand {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.4rem;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .brand-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+  .btn-icon {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s; flex-shrink: 0;
+    font-size: .78rem;
+  }
+
+  .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-icon svg   { width: 16px; height: 16px; }
+
+  /* ── layout ─────────────────────────────────────── */
+  .layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    min-height: calc(100vh - 56px);
+  }
+
+  /* ── sidebar ─────────────────────────────────────── */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    display: flex; flex-direction: column; gap: 16px;
+    background: var(--surface);
+    overflow-y: auto;
+  }
+
+  .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+
+  .sidebar-label {
+    font-size: .65rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    padding: 0 4px;
+  }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--R);
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: var(--surf2);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dropzone::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(240,192,96,.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .dropzone:hover, .dropzone.over { border-color: var(--accent); }
+  .dropzone.over { background: rgba(240,192,96,.04); }
+  .dropzone.busy { opacity: .6; cursor: not-allowed; pointer-events: none; }
+
+  .dz-icon {
+    width: 44px; height: 44px; margin: 0 auto 10px;
+    background: rgba(240,192,96,.1);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .2s;
+  }
+
+  .dropzone:hover .dz-icon { transform: scale(1.08); }
+  .dz-icon svg { width: 22px; height: 22px; stroke: var(--accent); }
+
+  .dz-title { font-size: .85rem; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .dz-sub   { font-size: .7rem; color: var(--muted); line-height: 1.5; }
+  .dz-hints { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+
+  .hint {
+    font-size: .6rem; text-transform: uppercase; letter-spacing: .06em;
+    background: var(--surf3); border: 1px solid var(--border);
+    color: var(--muted); padding: 2px 7px; border-radius: 4px;
+  }
+
+  .hint.hi { border-color: var(--accent); color: var(--accent); background: rgba(240,192,96,.08); }
+
+  /* Language selector */
+  .lang-search-wrap { position: relative; }
+
+  .lang-search {
+    width: 100%;
+    background: var(--surf2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px 7px 32px;
+    color: var(--text); font-family: 'Geist Mono', monospace;
+    font-size: .78rem; outline: none;
+    transition: border-color .2s;
+  }
+
+  .lang-search:focus { border-color: var(--accent); }
+  .lang-search::placeholder { color: var(--muted); }
+
+  .lang-search-icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; stroke: var(--muted); pointer-events: none;
+  }
+
+  .lang-list {
+    background: var(--surf2); border: 1px solid var(--border);
+    border-radius: 8px; max-height: 180px; overflow-y: auto;
+    font-size: .78rem;
+  }
+
+  .lang-opt {
+    padding: 7px 12px; cursor: pointer; transition: background .1s;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+  }
+
+  .lang-opt:hover   { background: var(--surf3); }
+  .lang-opt.active  { background: rgba(240,192,96,.12); color: var(--accent); }
+  .lang-opt .lcode  { color: var(--muted); font-size: .65rem; }
+
+  /* Queue */
+  .queue-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .queue-item {
+    background: var(--surf2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: .75rem; animation: fadeIn .2s ease;
+  }
+
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+
+  .qi-icon { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .qi-icon.pdf  { background: rgba(224,88,88,.15); }
+  .qi-icon.img  { background: rgba(91,156,246,.15); }
+  .qi-icon svg  { width: 14px; height: 14px; }
+  .qi-icon.pdf svg { stroke: var(--red); }
+  .qi-icon.img svg { stroke: var(--blue); }
+
+  .qi-info { flex: 1; min-width: 0; }
+  .qi-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .qi-status { font-size: .65rem; color: var(--muted); margin-top: 1px; }
+  .qi-status.done  { color: var(--green); }
+  .qi-status.err   { color: var(--red); }
+  .qi-status.proc  { color: var(--accent); }
+
+  /* ── main area ───────────────────────────────────── */
+  .main {
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* progress bar */
+  .progress-bar-wrap {
+    height: 3px; background: var(--border);
+    overflow: hidden; flex-shrink: 0;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    width: 0%; transition: width .4s ease;
+  }
+
+  /* main toolbar */
+  .main-toolbar {
+    padding: 12px 20px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .toolbar-status {
+    flex: 1;
+    font-size: .78rem; color: var(--muted);
+    min-width: 0;
+  }
+
+  .toolbar-status strong { color: var(--text); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'Geist Mono', monospace;
+    font-size: .75rem; font-weight: 500;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+    cursor: pointer; transition: all .15s; white-space: nowrap;
+    background: transparent; color: var(--muted);
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
+  .btn.primary:hover { background: var(--accent2); border-color: var(--accent2); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn svg { width: 13px; height: 13px; }
+
+  /* full doc */
+  .full-doc-section {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    display: none;
+  }
+
+  .full-doc-section.visible { display: block; }
+
+  .full-doc-header {
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .full-doc-title {
+    font-size: .78rem; font-weight: 500; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em; flex: 1;
+  }
+
+  .full-doc-textarea {
+    width: 100%; padding: 14px 20px;
+    background: transparent; border: none; outline: none; resize: none;
+    font-family: 'Geist Mono', monospace; font-size: .82rem;
+    color: var(--text); line-height: 1.7; max-height: 200px; overflow-y: auto;
+  }
+
+  /* pages */
+  .pages-scroll {
+    flex: 1; overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+
+  .page-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--R);
+    overflow: hidden;
+    animation: fadeIn .3s ease;
+  }
+
+  .page-header {
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surf2);
+  }
+
+  .page-num {
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); font-weight: 500;
+    background: var(--surf3); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 4px;
+  }
+
+  .page-method {
+    font-size: .65rem; padding: 2px 7px; border-radius: 4px;
+    border: 1px solid;
+  }
+
+  .page-method.ocr   { border-color: rgba(240,192,96,.4); color: var(--accent); background: rgba(240,192,96,.08); }
+  .page-method.text  { border-color: rgba(93,186,122,.4); color: var(--green);  background: rgba(93,186,122,.08); }
+  .page-method.error { border-color: rgba(224,88,88,.4);  color: var(--red);    background: rgba(224,88,88,.08); }
+
+  .page-conf {
+    font-size: .65rem; color: var(--muted);
+  }
+
+  .page-conf span { color: var(--text); }
+
+  .page-actions { margin-left: auto; display: flex; gap: 6px; }
+
+  .page-body { display: grid; grid-template-columns: 240px 1fr; gap: 0; }
+
+  .page-img-wrap {
+    border-right: 1px solid var(--border);
+    padding: 12px;
+    background: var(--surf2);
+    display: flex; align-items: flex-start; justify-content: center;
+  }
+
+  .page-img-wrap img {
+    max-width: 100%; border-radius: 6px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.3);
+    cursor: zoom-in;
+    transition: transform .2s;
+  }
+
+  .page-img-wrap img:hover { transform: scale(1.02); }
+
+  .page-text-wrap { padding: 0; display: flex; flex-direction: column; }
+
+  .page-textarea {
+    flex: 1; width: 100%; padding: 14px 16px;
+    background: transparent; border: none; outline: none; resize: none;
+    font-family: 'Geist Mono', monospace; font-size: .82rem;
+    color: var(--text); line-height: 1.7; min-height: 160px;
+  }
+
+  .page-textarea::placeholder { color: var(--muted); }
+
+  /* Processing placeholder */
+  .page-processing {
+    padding: 40px 20px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; grid-column: 1/-1;
+  }
+
+  .mini-spinner {
+    width: 28px; height: 28px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .proc-msg { font-size: .78rem; color: var(--muted); }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px; padding: 40px; text-align: center;
+    opacity: .6;
+  }
+
+  .empty-icon {
+    width: 72px; height: 72px;
+    background: var(--surf2);
+    border-radius: 50%; border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .empty-icon svg { width: 32px; height: 32px; stroke: var(--muted); }
+  .empty-title { font-family: 'Instrument Serif', serif; font-size: 1.5rem; color: var(--text); }
+  .empty-sub   { font-size: .78rem; color: var(--muted); max-width: 300px; line-height: 1.7; }
+
+  /* Image lightbox */
+  .lightbox {
+    display: none; position: fixed; inset: 0; z-index: 999;
+    background: rgba(0,0,0,.9); align-items: center; justify-content: center;
+    cursor: zoom-out;
+  }
+
+  .lightbox.open { display: flex; }
+  .lightbox img  { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(12px);
+    background: var(--surf2); border: 1px solid var(--border);
+    color: var(--text); font-size: .78rem;
+    padding: 8px 18px; border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: all .2s;
+    white-space: nowrap; z-index: 9999;
+    box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  }
+
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* Mobile */
+  @media(max-width: 720px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    .page-body { grid-template-columns: 1fr; }
+    .page-img-wrap { border-right: none; border-bottom: 1px solid var(--border); }
+    .lang-list { max-height: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-dot"></div>
+    Scanlens
+  </div>
+  <div class="topbar-actions">
+    <button class="btn-icon" id="btn-theme" title="Toggle dark/light mode">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
+    <button class="btn-icon" id="btn-clear-all" title="Clear everything">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Drop Zone -->
+    <div class="sidebar-section">
+      <div class="dropzone" id="dropzone">
+        <div class="dz-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="dz-title">Drop files here</div>
+        <div class="dz-sub">PDF, JPG, PNG, GIF — or paste from clipboard</div>
+        <div class="dz-hints">
+          <span class="hint">PDF</span>
+          <span class="hint">JPG</span>
+          <span class="hint">PNG</span>
+          <span class="hint hi">📋 Paste</span>
+          <span class="hint hi">📷 Camera</span>
+        </div>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.gif,image/*" multiple capture="environment" style="display:none">
+      <button class="btn primary" onclick="document.getElementById('fileInput').click()" style="width:100%;justify-content:center;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Select Files
+      </button>
+    </div>
+
+    <!-- Language -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">OCR Language</div>
+      <div class="lang-search-wrap">
+        <svg class="lang-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" class="lang-search" id="lang-search" placeholder="Search language…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="lang-list" id="lang-list"></div>
+    </div>
+
+    <!-- Queue -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">Queue</div>
+      <div class="queue-list" id="queue-list">
+        <div style="font-size:.72rem;color:var(--muted);padding:4px;">No files yet</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+
+    <div class="main-toolbar">
+      <div class="toolbar-status" id="toolbar-status">Ready — drop or select files to begin</div>
+      <button class="btn" id="btn-rerun" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.21"/></svg>
+        Re-run OCR
+      </button>
+      <button class="btn" id="btn-copy-all" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy All
+      </button>
+      <button class="btn" id="btn-download" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download .txt
+      </button>
+    </div>
+
+    <!-- Full document -->
+    <div class="full-doc-section" id="full-doc-section">
+      <div class="full-doc-header">
+        <div class="full-doc-title">Full Document</div>
+        <button class="btn" id="btn-copy-full">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+      </div>
+      <textarea class="full-doc-textarea" id="full-doc-textarea" readonly placeholder="Combined text from all pages…"></textarea>
+    </div>
+
+    <!-- Pages -->
+    <div class="pages-scroll" id="pages-scroll">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+        <div class="empty-title">No documents yet</div>
+        <div class="empty-sub">Drop a PDF or image on the left, or paste an image from your clipboard (Ctrl+V)</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div id="toast"></div>
+
+<!-- PDF.js -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.mjs" type="module"></script>
+<!-- Tesseract.js -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<script type="module">
+  // Wait for pdfjs to be available
+  const getPdfLib = () => new Promise(resolve => {
+    const check = () => {
+      if (typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.mjs';
+        resolve(pdfjsLib);
+      } else {
+        setTimeout(check, 50);
+      }
+    };
+    check();
+  });
+
+  /* ── LANGUAGES ────────────────────────────────────── */
+  const LANGUAGES = {
+    "afr":"Afrikaans","amh":"Amharic","ara":"Arabic","asm":"Assamese",
+    "aze":"Azerbaijani","bel":"Belarusian","ben":"Bengali","bod":"Tibetan",
+    "bos":"Bosnian","bul":"Bulgarian","cat":"Catalan","ceb":"Cebuano",
+    "ces":"Czech","chi_sim":"Chinese Simplified","chi_tra":"Chinese Traditional",
+    "chr":"Cherokee","cym":"Welsh","dan":"Danish","deu":"German",
+    "ell":"Greek","eng":"English","epo":"Esperanto","est":"Estonian",
+    "eus":"Basque","fas":"Persian","fin":"Finnish","fra":"French",
+    "gle":"Irish","glg":"Galician","guj":"Gujarati","heb":"Hebrew",
+    "hin":"Hindi","hrv":"Croatian","hun":"Hungarian","ind":"Indonesian",
+    "isl":"Icelandic","ita":"Italian","jpn":"Japanese","kan":"Kannada",
+    "kat":"Georgian","kaz":"Kazakh","khm":"Khmer","kor":"Korean",
+    "kur":"Kurdish","lao":"Lao","lat":"Latin","lav":"Latvian",
+    "lit":"Lithuanian","mal":"Malayalam","mar":"Marathi","mkd":"Macedonian",
+    "mlt":"Maltese","msa":"Malay","mya":"Burmese","nep":"Nepali",
+    "nld":"Dutch","nor":"Norwegian","pan":"Punjabi","pol":"Polish",
+    "por":"Portuguese","ron":"Romanian","rus":"Russian","san":"Sanskrit",
+    "sin":"Sinhala","slk":"Slovak","slv":"Slovenian","spa":"Spanish",
+    "sqi":"Albanian","srp":"Serbian","swa":"Swahili","swe":"Swedish",
+    "tam":"Tamil","tel":"Telugu","tgl":"Tagalog","tha":"Thai",
+    "tur":"Turkish","ukr":"Ukrainian","urd":"Urdu","vie":"Vietnamese",
+    "yid":"Yiddish"
+  };
+
+  /* ── State ────────────────────────────────────────── */
+  let selectedLang  = 'eng';
+  let tesseractWorker = null;
+  let workerLang    = null;
+  let isProcessing  = false;
+  let pageCount     = 0;
+  let pageData      = []; // { id, imageURL, textarea, method, confidence }
+  let fileQueue     = [];
+  let currentFileName = '';
+
+  /* ── DOM refs ─────────────────────────────────────── */
+  const dropzone      = document.getElementById('dropzone');
+  const fileInput     = document.getElementById('fileInput');
+  const pagesScroll   = document.getElementById('pages-scroll');
+  const emptyState    = document.getElementById('empty-state');
+  const progressBar   = document.getElementById('progress-bar');
+  const toolbarStatus = document.getElementById('toolbar-status');
+  const fullDocSec    = document.getElementById('full-doc-section');
+  const fullDocTA     = document.getElementById('full-doc-textarea');
+  const queueList     = document.getElementById('queue-list');
+  const langSearch    = document.getElementById('lang-search');
+  const langListEl    = document.getElementById('lang-list');
+  const btnRerun      = document.getElementById('btn-rerun');
+  const btnCopyAll    = document.getElementById('btn-copy-all');
+  const btnDownload   = document.getElementById('btn-download');
+  const btnCopyFull   = document.getElementById('btn-copy-full');
+
+  /* ── Language list ────────────────────────────────── */
+  function renderLangList(filter = '') {
+    langListEl.innerHTML = '';
+    const q = filter.toLowerCase();
+    const entries = Object.entries(LANGUAGES).filter(([code, name]) =>
+      !q || name.toLowerCase().includes(q) || code.toLowerCase().includes(q)
+    );
+    if (!entries.length) {
+      langListEl.innerHTML = `<div style="padding:10px 12px;font-size:.72rem;color:var(--muted)">No languages found</div>`;
+      return;
+    }
+    entries.forEach(([code, name]) => {
+      const el = document.createElement('div');
+      el.className = 'lang-opt' + (code === selectedLang ? ' active' : '');
+      el.innerHTML = `<span>${name}</span><span class="lcode">${code}</span>`;
+      el.onclick = () => { selectedLang = code; renderLangList(langSearch.value); toast(`Language: ${name}`); };
+      langListEl.appendChild(el);
+    });
+  }
+
+  langSearch.addEventListener('input', () => renderLangList(langSearch.value));
+  renderLangList();
+
+  /* ── Tesseract worker (reused, re-initialized on lang change) ── */
+  async function getWorker() {
+    if (tesseractWorker && workerLang === selectedLang) return tesseractWorker;
+    if (tesseractWorker) { await tesseractWorker.terminate(); tesseractWorker = null; }
+    tesseractWorker = await Tesseract.createWorker(selectedLang);
+    workerLang = selectedLang;
+    return tesseractWorker;
+  }
+
+  /* ── Drop zone ────────────────────────────────────── */
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); if (!isProcessing) dropzone.classList.add('over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault(); dropzone.classList.remove('over');
+    if (isProcessing) { toast('Already processing — please wait'); return; }
+    const files = [...e.dataTransfer.files].filter(validFile);
+    if (files.length) queueFiles(files);
+  });
+  dropzone.addEventListener('click', e => { if (!e.target.closest('button') && !isProcessing) fileInput.click(); });
+  fileInput.addEventListener('change', () => {
+    const files = [...fileInput.files].filter(validFile);
+    if (files.length) queueFiles(files);
+    fileInput.value = '';
+  });
+
+  document.addEventListener('paste', e => {
+    const items = [...(e.clipboardData || e.originalEvent.clipboardData).items];
+    const imgItem = items.find(i => i.type.startsWith('image/'));
+    if (imgItem) { queueFiles([imgItem.getAsFile()]); }
+  });
+
+  function validFile(f) {
+    return f.type === 'application/pdf' || f.type.startsWith('image/');
+  }
+
+  /* ── Queue handling ───────────────────────────────── */
+  function queueFiles(files) {
+    files.forEach(f => {
+      const qid = Date.now() + Math.random();
+      fileQueue.push({ file: f, qid });
+      addQueueItem(f, qid);
+    });
+    if (!isProcessing) processNextInQueue();
+  }
+
+  function addQueueItem(file, qid) {
+    if (queueList.querySelector('div[style]')) queueList.innerHTML = '';
+    const isPDF = file.type === 'application/pdf';
+    const el = document.createElement('div');
+    el.className = 'queue-item';
+    el.id = `qi-${qid}`;
+    el.innerHTML = `
+      <div class="qi-icon ${isPDF ? 'pdf' : 'img'}">
+        ${isPDF
+          ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`
+          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`
+        }
+      </div>
+      <div class="qi-info">
+        <div class="qi-name">${esc(file.name || 'pasted-image')}</div>
+        <div class="qi-status" id="qis-${qid}">Queued</div>
+      </div>`;
+    queueList.appendChild(el);
+  }
+
+  function setQueueStatus(qid, status, cls) {
+    const el = document.getElementById(`qis-${qid}`);
+    if (el) { el.textContent = status; el.className = `qi-status ${cls||''}`; }
+  }
+
+  async function processNextInQueue() {
+    if (!fileQueue.length) {
+      isProcessing = false;
+      setProgress(0);
+      return;
+    }
+    isProcessing = true;
+    dropzone.classList.add('busy');
+    const { file, qid } = fileQueue.shift();
+    setQueueStatus(qid, 'Processing…', 'proc');
+    currentFileName = file.name || 'document';
+
+    try {
+      await processFile(file, qid);
+      setQueueStatus(qid, 'Done ✓', 'done');
+    } catch (err) {
+      setQueueStatus(qid, 'Error ✗', 'err');
+      console.error(err);
+      toast('Error: ' + err.message);
+    }
+
+    dropzone.classList.remove('busy');
+    processNextInQueue();
+  }
+
+  /* ── Main processing ──────────────────────────────── */
+  async function processFile(file, qid) {
+    emptyState.style.display = 'none';
+    const worker = await getWorker();
+
+    if (file.type === 'application/pdf') {
+      await processPDF(file, worker);
+    } else {
+      await processImage(file, worker);
+    }
+
+    updateFullDoc();
+    updateToolbar();
+  }
+
+  async function processPDF(file, worker) {
+    const pdfLib = await getPdfLib();
+    const pdf    = await pdfLib.getDocument(URL.createObjectURL(file)).promise;
+    const total  = pdf.numPages;
+
+    setStatus(`Processing PDF — ${total} page${total > 1 ? 's' : ''}`);
+
+    // Try text layer extraction first (for digital PDFs)
+    // Then OCR as fallback
+    for (let i = 1; i <= total; i++) {
+      setProgress(Math.round(((i - 1) / total) * 100));
+      setStatus(`Page ${i} of ${total}…`);
+
+      const page      = await pdf.getPage(i);
+      const id        = ++pageCount;
+      const cardEl    = createPageCard(id);
+
+      // Render image
+      const imageURL  = await renderPageToImage(page);
+      populatePageImage(cardEl, imageURL, id);
+
+      // Try PDF text layer first
+      let text = '';
+      let method = 'ocr';
+      let conf = null;
+
+      try {
+        const textContent = await page.getTextContent();
+        const extracted   = textContent.items.map(item => item.str).join(' ').trim();
+        if (extracted.length > 50) {  // meaningful text found
+          text   = extracted;
+          method = 'text';
+        }
+      } catch (_) {}
+
+      if (method === 'ocr') {
+        try {
+          const result = await worker.recognize(imageURL);
+          text = result.data.text;
+          conf = Math.round(result.data.confidence);
+        } catch (err) {
+          method = 'error';
+          text   = '[OCR failed for this page]';
+        }
+      }
+
+      finalizePageCard(cardEl, imageURL, text, method, conf, id);
+      setProgress(Math.round((i / total) * 100));
+    }
+  }
+
+  async function processImage(file, worker) {
+    const imageURL = URL.createObjectURL(file);
+    const id       = ++pageCount;
+    setStatus('Running OCR…');
+    setProgress(30);
+
+    const cardEl = createPageCard(id);
+    populatePageImage(cardEl, imageURL, id);
+
+    let text = '', method = 'ocr', conf = null;
+    try {
+      const result = await worker.recognize(imageURL);
+      text = result.data.text;
+      conf = Math.round(result.data.confidence);
+    } catch (err) {
+      method = 'error';
+      text   = '[OCR failed]';
+    }
+
+    setProgress(100);
+    finalizePageCard(cardEl, imageURL, text, method, conf, id);
+  }
+
+  /* ── Page card builders ───────────────────────────── */
+  function createPageCard(id) {
+    const card = document.createElement('div');
+    card.className = 'page-card';
+    card.id = `page-card-${id}`;
+    card.innerHTML = `
+      <div class="page-header">
+        <span class="page-num">Page ${id}</span>
+        <span class="page-method ocr" id="pm-${id}">OCR</span>
+        <span class="page-conf" id="pc-${id}"></span>
+        <div class="page-actions">
+          <button class="btn-icon" onclick="copyPage(${id})" title="Copy text">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="btn-icon" onclick="deletePage(${id})" title="Remove page" style="color:var(--muted)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="page-body" id="pb-${id}">
+        <div class="page-processing" style="grid-column:1/-1">
+          <div class="mini-spinner"></div>
+          <div class="proc-msg">Processing…</div>
+        </div>
+      </div>`;
+    pagesScroll.appendChild(card);
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return card;
+  }
+
+  function populatePageImage(card, imageURL, id) {
+    // nothing yet — image added in finalize so it shows alongside text
+  }
+
+  function finalizePageCard(card, imageURL, text, method, conf, id) {
+    const body = document.getElementById(`pb-${id}`);
+    const pm   = document.getElementById(`pm-${id}`);
+    const pc   = document.getElementById(`pc-${id}`);
+
+    // Update method badge
+    pm.textContent = method === 'text' ? 'Text Layer' : method === 'error' ? 'Error' : 'OCR';
+    pm.className   = `page-method ${method === 'text' ? 'text' : method === 'error' ? 'error' : 'ocr'}`;
+
+    // Confidence
+    if (conf !== null && method === 'ocr') {
+      pc.innerHTML = `Confidence: <span>${conf}%</span>`;
+    }
+
+    // Build body
+    body.innerHTML = `
+      <div class="page-img-wrap">
+        <img src="${imageURL}" alt="Page ${id}" onclick="openLightbox('${imageURL}')">
+      </div>
+      <div class="page-text-wrap">
+        <textarea class="page-textarea" id="ta-${id}" spellcheck="false">${esc(text)}</textarea>
+      </div>`;
+
+    // Auto-height
+    const ta = document.getElementById(`ta-${id}`);
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = Math.max(160, ta.scrollHeight) + 'px';
+      ta.addEventListener('input', () => {
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+        updateFullDoc();
+      });
+    }
+
+    // Store reference
+    pageData.push({ id, imageURL, method, conf });
+  }
+
+  /* ── Full document sync ───────────────────────────── */
+  function updateFullDoc() {
+    const texts = pageData
+      .map(p => document.getElementById(`ta-${p.id}`)?.value?.trim())
+      .filter(Boolean);
+
+    if (texts.length > 1) {
+      fullDocTA.value = texts.join('\n\n---\n\n');
+      fullDocTA.style.height = 'auto';
+      fullDocTA.style.height = Math.min(200, fullDocTA.scrollHeight) + 'px';
+      fullDocSec.classList.add('visible');
+    } else if (texts.length === 1) {
+      fullDocSec.classList.remove('visible');
+    }
+  }
+
+  function updateToolbar() {
+    const hasDocs = pageData.length > 0;
+    btnRerun.disabled    = !hasDocs;
+    btnCopyAll.disabled  = !hasDocs;
+    btnDownload.disabled = !hasDocs;
+    setStatus(`${pageData.length} page${pageData.length !== 1 ? 's' : ''} processed`);
+  }
+
+  /* ── Re-run OCR ───────────────────────────────────── */
+  btnRerun.addEventListener('click', async () => {
+    if (!pageData.length || isProcessing) return;
+    isProcessing = true;
+    btnRerun.disabled = true;
+
+    const worker = await getWorker();
+    const total  = pageData.length;
+
+    for (let i = 0; i < total; i++) {
+      const p  = pageData[i];
+      const ta = document.getElementById(`ta-${p.id}`);
+      const pm = document.getElementById(`pm-${p.id}`);
+      const pc = document.getElementById(`pc-${p.id}`);
+      if (!ta) continue;
+
+      setProgress(Math.round((i / total) * 100));
+      setStatus(`Re-running OCR on page ${i + 1} of ${total}…`);
+
+      try {
+        const result = await worker.recognize(p.imageURL);
+        ta.value = result.data.text;
+        ta.style.height = 'auto';
+        ta.style.height = Math.max(160, ta.scrollHeight) + 'px';
+        const conf = Math.round(result.data.confidence);
+        pm.textContent = 'OCR'; pm.className = 'page-method ocr';
+        pc.innerHTML = `Confidence: <span>${conf}%</span>`;
+      } catch (_) {}
+    }
+
+    setProgress(100); setTimeout(() => setProgress(0), 800);
+    updateFullDoc();
+    isProcessing = false;
+    btnRerun.disabled = false;
+    setStatus(`Re-OCR complete — ${total} page${total > 1 ? 's' : ''}`);
+    toast('Re-run complete');
+  });
+
+  /* ── Copy / Download ──────────────────────────────── */
+  btnCopyAll.addEventListener('click', () => copyAllText());
+  btnCopyFull.addEventListener('click', () => {
+    navigator.clipboard.writeText(fullDocTA.value).then(() => toast('Copied!'));
+  });
+
+  function copyAllText() {
+    const texts = pageData
+      .map(p => document.getElementById(`ta-${p.id}`)?.value?.trim())
+      .filter(Boolean).join('\n\n---\n\n');
+    navigator.clipboard.writeText(texts).then(() => toast('Copied all text!'));
+  }
+
+  btnDownload.addEventListener('click', () => {
+    const texts = pageData
+      .map((p, i) => {
+        const t = document.getElementById(`ta-${p.id}`)?.value?.trim() || '';
+        return pageData.length > 1 ? `--- Page ${i + 1} ---\n${t}` : t;
+      }).join('\n\n');
+    const blob = new Blob([texts], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = currentFileName.replace(/\.[^.]+$/, '') + '-ocr.txt' || 'ocr-output.txt';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Downloaded!');
+  });
+
+  /* ── Global page actions ──────────────────────────── */
+  window.copyPage = (id) => {
+    const ta = document.getElementById(`ta-${id}`);
+    if (ta) navigator.clipboard.writeText(ta.value).then(() => toast('Copied!'));
+  };
+
+  window.deletePage = (id) => {
+    const card = document.getElementById(`page-card-${id}`);
+    if (card) { card.style.transition='opacity .2s'; card.style.opacity='0'; setTimeout(()=>card.remove(),200); }
+    pageData = pageData.filter(p => p.id !== id);
+    if (!pageData.length) emptyState.style.display = '';
+    updateFullDoc(); updateToolbar();
+  };
+
+  /* ── Clear all ────────────────────────────────────── */
+  document.getElementById('btn-clear-all').addEventListener('click', () => {
+    pageData = []; pageCount = 0; fileQueue = [];
+    pagesScroll.innerHTML = '';
+    pagesScroll.appendChild(emptyState);
+    emptyState.style.display = '';
+    queueList.innerHTML = '<div style="font-size:.72rem;color:var(--muted);padding:4px;">No files yet</div>';
+    fullDocSec.classList.remove('visible');
+    fullDocTA.value = '';
+    setProgress(0);
+    setStatus('Ready — drop or select files to begin');
+    btnRerun.disabled = btnCopyAll.disabled = btnDownload.disabled = true;
+  });
+
+  /* ── PDF render helper ────────────────────────────── */
+  async function renderPageToImage(page) {
+    const DESIRED_W = 1400;
+    const viewport  = page.getViewport({ scale: 1 });
+    const scale     = DESIRED_W / viewport.width;
+    const canvas    = document.createElement('canvas');
+    const ctx       = canvas.getContext('2d');
+    canvas.width    = DESIRED_W;
+    canvas.height   = Math.round(viewport.height * scale);
+    await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale }) }).promise;
+    return canvas.toDataURL('image/jpeg', 0.9);
+  }
+
+  /* ── Lightbox ─────────────────────────────────────── */
+  window.openLightbox = (src) => {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.add('open');
+  };
+
+  window.closeLightbox = () => {
+    document.getElementById('lightbox').classList.remove('open');
+  };
+
+  /* ── Theme toggle ─────────────────────────────────── */
+  document.getElementById('btn-theme').addEventListener('click', () => {
+    const curr = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', curr === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ── Helpers ──────────────────────────────────────── */
+  function setStatus(msg) { toolbarStatus.innerHTML = msg; }
+  function setProgress(pct) { progressBar.style.width = pct + '%'; }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  let toastT;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  window.toast = toast;
+</script>
+</body>
+</html>
